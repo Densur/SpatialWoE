@@ -187,7 +187,6 @@ class OptimizedSpatialWoE(SpatialWoEBase):
                 cv_scores.append(scores.mean())
             best = np.argmax(cv_scores) + start
             tree_args['max_depth'] = best
-        print(best)
         self.tree = right_tree(**tree_args)
         self.tree.fit(self.x, self.y)
 
