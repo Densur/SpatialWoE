@@ -159,15 +159,21 @@ class QuantileSpatialWoE(SpatialWoEBase):
 
 class OptimizedSpatialWoE(SpatialWoEBase):
 
-    def __init__(self, tree_args={'max_depth': 3}, cv=3, cv_scoring=None):
+    def __init__(self, tree_args={'max_depth': 3}, cv=3, cv_scoring=None, t_type='b'):
         super().__init__()
         self.tree_args = tree_args # dict with optional args for decision tree
         self.tree = None  # decision tree for optimize approach
         self.cv = cv  # number of cv folds for cross-validation (if none - tree is fitted without cv search)
         self.cv_scoring = cv_scoring # scorer for cross-validation
+        self.t_type = t_type # type of target variable (binary 'b' or continuous 'c'
 
     def _split_regions(self):
         tree_args = {} if self.tree_args is None else self.tree_args.copy()
+
+        if self.t_type == 'b':
+            right_tree = tree.DecisionTreeClassifier
+        else:
+            right_tree = tree.DecisionTreeRegressor
 
         if self.cv is not None:
             start = 1
@@ -176,19 +182,17 @@ class OptimizedSpatialWoE(SpatialWoEBase):
             cv_scores = []
             for i in range(start, m_depth):
                 tree_args['max_depth'] = i
-                tr = tree.DecisionTreeClassifier(**tree_args)
+                tr = right_tree(**tree_args)
                 scores = cross_val_score(tr, self.x, self.y, cv=self.cv, scoring=self.cv_scoring)
                 cv_scores.append(scores.mean())
             best = np.argmax(cv_scores) + start
             tree_args['max_depth'] = best
-
-        self.tree = tree.DecisionTreeClassifier(**tree_args)
+        print(best)
+        self.tree = right_tree(**tree_args)
         self.tree.fit(self.x, self.y)
 
         leafs = (self.tree.tree_.feature == -2).nonzero()[0]
         self._dict_reg_convert = {new_reg: [old_reg] for (new_reg, old_reg) in enumerate(sorted(leafs))}
-        # regions_raw = self.tree.apply(self.x)
-        # self.region = self._replace_values_from_dict(regions_raw, self._dict_reg_convert)
         self.region = self.predict(self.x)
 
     def predict(self, x):
@@ -202,6 +206,10 @@ if __name__ == "__main__":
     np.random.seed(1)
     x = np.random.randn(N, 2)
     y = np.where(np.random.rand(N, 1) / 10 + np.sum(x, axis=1, keepdims=True) < 0, 1, 0)
+    y_c = np.random.rand(N, 1) / 10 + np.sum(x, axis=1, keepdims=True)
+    y_c -= y_c.min()
+    y_c /= y_c.max()
+
 
     # Optimized WoE test cases
     sw = OptimizedSpatialWoE()
@@ -211,6 +219,10 @@ if __name__ == "__main__":
     sw.merge((1, 2))
     plt.show(sw.plot())
 
+    # Optimized WoE continuous test cases
+    sw = OptimizedSpatialWoE(tree_args={'max_depth': 6}, t_type='c')
+    sw.fit(x, y_c)
+    plt.show(sw.plot())
 
     # Quantile WoE test cases
     sw = QuantileSpatialWoE()
